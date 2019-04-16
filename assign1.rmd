@@ -1,0 +1,277 @@
+
+library(dataMaid)
+
+clean(Data1)
+
+check(Data1$TELEPHONE)
+
+summary(Data1)
+
+plot(Data1$`OBS#`,Data1$RESPONSE)
+table(Data1$RESPONSE)
+Data1[!complete.cases(Data1),]
+
+sum(is.na (Data1)) 
+table(is.na (Data1))
+sapply(Data1, function(x) sum(is.na (x)))
+
+creditData <- read_excel("D:/MSBA/Data mining/Assignment 1/GermanCredit_assgt1_F18.xls")
+
+#Good or bad Ratio
+creditData$RESPONSE_1<-as.factor(ifelse(creditData$RESPONSE == "1", "Good", "Bad"))
+op<-par(mfrow=c(1,2), new=TRUE)
+plot(as.numeric(creditData$RESPONSE_1), ylab="Good-Bad", xlab="n", main="Good ~ Bad")
+hist(as.numeric(creditData$RESPONSE_1), breaks=2, 
+     xlab="Good(1) and Bad(2)", col="blue")
+
+#Information Value(IV) and Weight of Evidence(WOE)
+creditData$RESPONSE_1<-as.numeric(ifelse(creditData$RESPONSE_1 == "Good", 0, 1))
+IV <- Information::create_infotables(data=creditData, NULL, y="RESPONSE_1", 10)
+IV$Summary$IV <- round(IV$Summary$IV*100,2)
+
+IV$Tables
+
+kable(IV$Summary)
+
+
+creditData$NEW_CAR[is.na(creditData$NEW_CAR)] <- 0
+creditData$USED_CAR[is.na(creditData$USED_CAR)] <- 0
+creditData$FURNITURE[is.na(creditData$FURNITURE)] <- 0
+creditData$`RADIO/TV`[is.na(creditData$`RADIO/TV`)] <- 0
+creditData$EDUCATION[is.na(creditData$EDUCATION)] <- 0
+creditData$RETRAINING[is.na(creditData$RETRAINING)] <- 0
+sum(is.na(creditData))
+creditData$AGE[is.na(creditData$AGE)] <- 35
+
+install.packages("rpart")
+library('rpart')
+
+rpart.control(minsplit = 50, cp = 0.01, maxsurrogate = 5, usesurrogate = 1, 
+              xval = 10,maxdepth = 20)
+rpTree <- rpart(RESPONSE ~., data = creditData, method = "class")
+rppred <- predict(rpTree, creditData, type = "class")
+table(pred = rppred, true = creditData$RESPONSE)
+mean(rppred==creditData$RESPONSE)
+plot(rpTree, uniform=TRUE, main="decision tree")
+text(rpTree, use.n=TRUE, all=TRUE, cex=.6)
+
+#split the data into training and test(validation) sets - 50% for training, rest for validation
+nr=nrow(creditData)
+trnIndex = sample(1:nr, size = round(0.5*nr), replace=FALSE) 
+#get a random 70%sample of row-indices
+mdTrn=creditData[trnIndex,]  
+#training data with the randomly selected row-indices
+mdTst = creditData[-trnIndex,]  
+#test data with the other row-indices
+
+dim(mdTrn) 
+dim(mdTst)
+
+#develop a tree on the training data
+set.seed(123)
+rpModel2=rpart(RESPONSE ~ ., data=mdTrn, method="class")
+
+#Obtain the model's predictions on the training data
+predTrn=predict(rpModel2, mdTrn, type='class')
+#Confusion table
+table(pred = predTrn, true=mdTrn$RESPONSE)
+#Accuracy
+mean(predTrn==mdTrn$RESPONSE)
+
+#Obtain the model's predictions on the test data
+ #combining the two steps for ge
+cm <- table(pred=predict(rpModel2,mdTst, type="class"), true=mdTst$RESPONSE)
+n = sum(cm) 
+print(n)
+# number of instances
+diag = diag(cm) 
+# number of correctly classified instances per class 
+rowsums = apply(cm, 2, sum)
+# number of instances per class
+colsums = apply(cm, 1, sum) 
+# number of predictions per class
+p = rowsums / n 
+# distribution of instances over the actual classes
+q = colsums / n 
+# distribution of instances over the predicted classes
+accuracy = sum(diag) / n 
+#accuracy
+precision = diag / colsums 
+recall = diag / rowsums 
+f1 = 2 * precision * recall / (precision + recall) 
+```
+print(accuracy)
+print(precision)
+print(recall)
+print(f1)
+
+#Apply different classification threshold and examine performance on train
+```{r}
+CTHRESH=0.5
+
+predProbTrn=predict(rpTree, mdTrn, type='prob')
+#Confusion table
+predTrn = ifelse(predProbTrn[,'1'] >= CTHRESH, '1', '0')
+print(ct)
+ct = table( pred = predTrn, true=mdTrn$RESPONSE)
+#Accuracy
+mean(predTrn==mdTrn$RESPONSE)
+```
+
+
+Calculating ROC and Lift curves using ROCR
+```{r}
+#score test data set
+library(ROCR)
+#score test data set
+mdTst$score<-predict(rpModel2,type='prob',mdTst)
+pred<-prediction(mdTst$score[,2],mdTst$RESPONSE)
+perf <- performance(pred,"tpr","fpr")
+plot(perf, main="ROC curve", colorize=T)
+
+#accuracy vs cutoff
+plot(performance(pred, "acc"), col='blue')
+
+perf1 <- performance(pred,"lift","rpp")
+plot(perf1, main="lift curve",col='red')
+
+library("pROC")
+roc(creditData,pred)
+auc(perf)
+
+AUC <- round(performance(pred, measure = "auc")@y.values[[1]]*100, 2)
+Gini <- (2*m1_AUROC - 100)
+cat("AUC: ",AUC,"\tGini:", Gini, "\n")
+
+
+
+#####QUES 4 
+
+mdTst$score<-predict(rpModel2,type='prob',mdTst)
+pred<-prediction(mdTst$score[,2],mdTst$RESPONSE)
+perf <- performance(pred,"tpr","fpr")
+plot(perf)
+
+costMatrix <- matrix(c(0,1,5, 0), byrow=TRUE, nrow=2)
+colnames(costMatrix) <- c('Predict Good','Predict Bad')
+rownames(costMatrix) <- c('Actual Good','Actual Bad')
+costMatrix
+rpTree = rpart(RESPONSE ~ ., data=mdTrn, method="class", parms = list( prior = c(.50,.50), loss = costMatrix, split = "information"))
+rpTree
+
+th = costMatrix[2,1]/(costMatrix[2,1] + costMatrix[1,2])
+th
+
+
+library('ROCR')
+
+#obtain the scores from the model for the class of interest, here, the prob('default')
+scoreTst=predict(rpModel1,mdTst, type="prob")[,'1']  
+scoreTst
+   #same as predProbTst
+
+#now apply the prediction function from ROCR to get a prediction object
+rocPredTst = prediction(scoreTst, mdTst$RESPONSE, label.ordering = c('0', '1'))  
+
+#obtain performance using the function from ROCR, then plot
+perfROCTst=performance(rocPredTst, "tpr", "fpr")
+plot(perfROCTst,col='Red')
+
+#optimal cutoff
+cost.perf = performance(rocPredTst, "cost")
+rocPredTst@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+
+
+#optimal cost with different costs for fp and fn
+cost.perf = performance(rocPredTst, "cost", cost.fp = 2, cost.fn = 1)
+
+#other performance measures with the performance function
+acc.perf = performance(rocPredTst, measure = "acc")
+plot(acc.perf,col='Blue')
+
+#AUC vaue
+auc.perf = performance(rocPredTst, measure = "auc")
+auc.perf@y.values
+```
+
+Examine the ROCR prediction object
+```{r}
+class(rocPredTst)
+slotNames(rocPredTst)
+sapply(slotNames(rocPredTst), function(x) class(slot(rocPredTst, x)))
+sapply(slotNames(rocPredTst), function(x) length(slot(rocPredTst, x)))
+```
+
+The prediction object has a set of slots with names as seen above.
+The slots hold values of predictions,  labels, cutoffs, fp values, ....etc.
+
+Similarly, examine the ROCR performance object
+```{r}
+class(acc.perf)
+slotNames(acc.perf)
+
+acc.perf@x.name   
+#values in the x.name slot
+acc.perf@y.name
+```
+So the x.values give the cutoff values and the y.values goves the corresponding accuracy. We can use these to find, for example, the cutoff corresponding to the maximum accuracy
+```{r}
+#The accuracy values are in y.values slot of the acc.perf object. 
+#This is a list, as seen by: 
+class(acc.perf@y.values)
+#... and we can get the values through 
+acc.perf@y.values[[1]]
+
+#get the index of the max value of accuracy
+ind=which.max(acc.perf@y.values[[1]])
+
+#get the accuracy value coresponding to this index
+acc = (acc.perf@y.values[[1]])[ind]
+acc
+
+#get the cutoff corresponding to this index
+cutoff = (acc.perf@x.values[[1]])[ind]
+
+#show these results
+print(c(accuracy= acc, cutoff = cutoff))
+```
+
+Similarly, for the optimal ROC curve based cutoff (using the "cost" as performance measure), we can get the corresponding TP and FP values
+```{r}
+cost.perf = performance(rocPredTst, "cost")
+optCutoff = rocPredTst@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+optCutInd = which.max(perfROCTst@alpha.values[[1]] == optCutoff)
+
+#get the ROC curve values, i.e. TPRate and FPRate for different cutoffs
+perfROCTst=performance(rocPredTst, "tpr", "fpr")
+#You should check the slotNames of perROCTst....the FPRate is in x.values and TPRate is in y.values
+
+OptCutoff_FPRate = perfROCTst@x.values[[1]][optCutInd]
+OptCutoff_TPRate = perfROCTst@y.values[[1]][optCutInd]
+print(c(OptimalCutoff=optCutoff, FPRAte=OptCutoff_FPRate, TPRate =OptCutoff_TPRate))
+
+####QUES 5
+
+#count depth of tree
+nodes <- as.numeric(rownames(rpModel2$frame))
+max(rpart:::tree.depth(nodes))
+
+
+
+
+CTHRESH=0.9
+
+predProbTrn=predict(rpModel2, mdTrn, type='prob')
+predTrn = ifelse(predProbTrn[, '1'] >= CTHRESH, '1', '0')
+ct = table( pred = predTrn, true=mdTrn$RESPONSE)
+mean(predTrn==mdTrn$RESPONSE)
+
+0.2 - 72
+0.3 - 75.4
+0.6 - 76.6
+0.5 - 76.6
+0.4 - 76.6
+0.7 - 76.4
+0.8 - 70.6
+0.9 - 0.636
+0.8 - 70.6
